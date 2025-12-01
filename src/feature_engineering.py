@@ -17,12 +17,18 @@ class FeatureEngineer:
     """
     Feature engineering pipeline for churn prediction.
 
-    Creates comprehensive features from raw session-level data including:
-    - First session features (early indicators)
-    - Behavioral features (aggregated patterns)
-    - Financial features (betting and monetary)
-    - Engagement features (platform usage)
-    - Trend features (behavioral changes)
+    By default, creates features using ONLY first session data to avoid data leakage.
+    This is critical because the target (churn) is defined as "no redeposit after first session".
+
+    First session features include:
+    - Temporal (hour, day_of_week, weekend, holiday)
+    - Financial (bet_amount, win_amount, net_result, deposit)
+    - Behavioral (games_played, session_length, bonus_used)
+    - Demographics (vip_tier, device, country, payment_method)
+
+    Note: The class also contains methods for behavioral, financial, engagement, and trend
+    features which use ALL sessions. These are kept for reference but should NOT be used
+    for churn prediction as they cause data leakage.
     """
 
     def __init__(self):
@@ -393,7 +399,8 @@ class FeatureEngineer:
     def build_feature_matrix(
         self,
         df: pd.DataFrame,
-        target: pd.Series
+        target: pd.Series,
+        first_session_only: bool = True
     ) -> pd.DataFrame:
         """
         Build complete feature matrix from raw session data.
@@ -404,6 +411,9 @@ class FeatureEngineer:
             Processed session-level data with 'is_first_session' column
         target : pd.Series
             Target variable (churn) indexed by user_id
+        first_session_only : bool
+            If True (default), use only first session features to avoid data leakage.
+            Set to False only for experimental purposes.
 
         Returns
         -------
@@ -412,24 +422,31 @@ class FeatureEngineer:
         """
         logger.info("Building feature matrix...")
 
-        # Extract all feature categories
+        # Extract first session features (always included)
         first_session_features = self.extract_first_session_features(df)
-        behavioral_features = self.extract_behavioral_features(df)
-        financial_features = self.extract_financial_features(df)
-        engagement_features = self.extract_engagement_features(df)
-        trend_features = self.extract_trend_features(df)
-
-        # Merge all features
         features_df = first_session_features.copy()
-        features_df = features_df.merge(behavioral_features, on='user_id', how='left')
-        features_df = features_df.merge(financial_features, on='user_id', how='left')
-        features_df = features_df.merge(engagement_features, on='user_id', how='left')
-        features_df = features_df.merge(trend_features, on='user_id', how='left')
+
+        # IMPORTANT: By default, only use first session features to avoid data leakage
+        # The behavioral, financial, engagement, and trend features use data from ALL sessions,
+        # which would leak future information when predicting churn after first session.
+        if not first_session_only:
+            logger.warning("Using all features - this may cause data leakage!")
+            behavioral_features = self.extract_behavioral_features(df)
+            financial_features = self.extract_financial_features(df)
+            engagement_features = self.extract_engagement_features(df)
+            trend_features = self.extract_trend_features(df)
+
+            features_df = features_df.merge(behavioral_features, on='user_id', how='left')
+            features_df = features_df.merge(financial_features, on='user_id', how='left')
+            features_df = features_df.merge(engagement_features, on='user_id', how='left')
+            features_df = features_df.merge(trend_features, on='user_id', how='left')
 
         # Add target
         features_df = features_df.merge(target.reset_index(), on='user_id', how='left')
 
         logger.info(f"Feature matrix built: {features_df.shape}")
+        if first_session_only:
+            logger.info("Using first-session features only (no data leakage)")
 
         return features_df
 
@@ -491,10 +508,9 @@ class FeatureEngineer:
         if 'first_session_vip_tier' in df.columns:
             df['first_session_vip_tier_encoded'] = df['first_session_vip_tier'].map(vip_order).fillna(0)
 
-        # One-hot encode low cardinality features
+        # One-hot encode low cardinality features (first session only to avoid leakage)
         low_cardinality_cols = [
-            'first_session_device', 'first_session_game_type', 'first_session_campaign',
-            'primary_device', 'favorite_game_type'
+            'first_session_device', 'first_session_game_type', 'first_session_campaign'
         ]
 
         for col in low_cardinality_cols:
@@ -502,10 +518,9 @@ class FeatureEngineer:
                 dummies = pd.get_dummies(df[col], prefix=col, drop_first=True)
                 df = pd.concat([df, dummies], axis=1)
 
-        # Target encode high cardinality features
+        # Target encode high cardinality features (first session only to avoid leakage)
         high_cardinality_cols = [
-            'first_session_country', 'first_session_payment_method',
-            'primary_payment_method'
+            'first_session_country', 'first_session_payment_method'
         ]
 
         for col in high_cardinality_cols:

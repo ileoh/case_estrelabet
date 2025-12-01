@@ -6,10 +6,10 @@
 ## 1. Overview
 
 ### Business Context
-Customer retention is the difference between profit and loss in the online betting market. With an average Customer Acquisition Cost (CAC) of R\$150-300 per user, each retained customer can generate R\$500 to R\$20,000 in Lifetime Value (LTV) depending on their tier.
+Customer retention is the difference between profit and loss in the online betting market. With an average Customer Acquisition Cost (CAC) of R$150-300 per user, each retained customer can generate R$500 to R$20,000 in Lifetime Value (LTV) depending on their tier.
 
 ### Objective
-Develop a predictive model to identify customers who will **churn** (NOT make a redeposit) after their first bet, enabling proactive retention interventions.
+Develop a predictive model to identify customers who will **churn** (NOT make a redeposit) after their first betting session, enabling proactive retention interventions.
 
 **Target Variable Definition**:
 - **Churn = 1**: Customer did NOT make a redeposit (churned)
@@ -28,20 +28,20 @@ Develop a predictive model to identify customers who will **churn** (NOT make a 
 
 | Tier | CLV Range | Midpoint (Used) |
 |------|-----------|-----------------|
-| Bronze | R\$500 - R\$1,000 | R\$750 |
-| Silver | R\$1,500 - R\$2,000 | R\$1,750 |
-| Gold | R\$2,500 - R\$5,500 | R\$4,000 |
-| Platinum | R\$6,000 - R\$10,000 | R\$8,000 |
-| Diamond | R\$10,500 - R\$20,000 | R\$15,250 |
+| Bronze | R$500 - R$1,000 | R$750 |
+| Silver | R$1,500 - R$2,000 | R$1,750 |
+| Gold | R$2,500 - R$5,500 | R$4,000 |
+| Platinum | R$6,000 - R$10,000 | R$8,000 |
+| Diamond | R$10,500 - R$20,000 | R$15,250 |
 
 ### Retention Campaign Costs (Per User)
 
 | Campaign Type | Cost Range | Midpoint (Used) |
 |---------------|------------|-----------------|
-| Email | R\$15 - R\$35 | R\$25 |
-| Bonus | R\$50 - R\$150 | R\$100 |
-| Phone/Chat | R\$75 - R\$200 | R\$137.50 |
-| VIP Manager | R\$250 - R\$500 | R\$375 |
+| Email | R$15 - R$35 | R$25 |
+| Bonus | R$50 - R$150 | R$100 |
+| Phone/Chat | R$75 - R$200 | R$137.50 |
+| VIP Manager | R$250 - R$500 | R$375 |
 
 ### Historical Retention Effectiveness by Risk Level
 
@@ -57,11 +57,13 @@ Develop a predictive model to identify customers who will **churn** (NOT make a 
 
 | Metric | Value | Interpretation |
 |--------|-------|----------------|
-| **Churn Rate** | ~32-35% | Baseline churn rate |
-| **Retention Rate** | ~65-68% | Baseline retention |
-| **Model ROC-AUC** | 0.99+ | Excellent discrimination |
-| **Model Recall** | ~100% | Captures all churners |
-| **Model Precision** | ~100% | High targeting accuracy |
+| **Churn Rate** | ~32.6% | Baseline churn rate after first session |
+| **Retention Rate** | ~67.4% | Baseline retention |
+| **Model ROC-AUC** | 0.60-0.66 | Moderate discrimination ability |
+| **Model Recall** | ~54% | Captures half of churners |
+| **Model Precision** | ~38% | Targeting accuracy |
+
+**Note**: These metrics reflect predictions made using **only first-session data**, which is a challenging but realistic scenario for early churn detection.
 
 ---
 
@@ -122,26 +124,32 @@ Develop a predictive model to identify customers who will **churn** (NOT make a 
 
 ## 5. Model Performance
 
-### Best Model: XGBoost / LightGBM
+### Best Model: Logistic Regression / LightGBM
 
-| Metric | Value | Interpretation |
-|--------|-------|----------------|
-| ROC-AUC | 0.99+ | Excellent discrimination |
-| PR-AUC | 0.99+ | Excellent precision-recall |
-| F2-Score | 0.99+ | High recall-weighted performance |
-| Recall | ~100% | Captures all churners |
-| Precision | ~100% | Minimal false alarms |
+| Metric | Validation | Test | Interpretation |
+|--------|------------|------|----------------|
+| ROC-AUC | 0.66 | 0.56 | Moderate discrimination |
+| PR-AUC | 0.45 | 0.34 | Above random baseline |
+| F2-Score | 0.56 | 0.50 | Recall-weighted performance |
+| Recall | 0.58 | 0.54 | Captures 54% of churners |
+| Precision | 0.42 | 0.38 | 38% of flagged users actually churn |
 
-### Top Predictive Features (Churn Prediction)
+**Why metrics are moderate (not perfect)**:
+- Model uses **only first-session features** (no future information)
+- This is the correct methodology to avoid data leakage
+- Predicting churn with limited data is inherently challenging
+- Metrics are realistic for production deployment
 
-1. **deposit_count** - Number of deposits made (more deposits = less churn)
-2. **total_sessions** - Total number of sessions (more sessions = less churn)
-3. **deposit_to_bet_ratio** - Ratio of deposits to bets
-4. **total_time_played** - Total time played (more time = less churn)
-5. **total_games_played** - Games played (more games = less churn)
-6. **first_session_deposited** - Whether deposit made in first session
-7. **first_session_net_result** - Net result of first betting session
-8. **campaign_diversity** - Number of different campaigns exposed to
+### Top Predictive Features (First Session Only)
+
+1. **first_session_net_result** - Net result of first betting session
+2. **first_session_bet_amount** - Amount bet in first session
+3. **first_session_win_amount** - Winnings in first session
+4. **first_session_length** - Duration of first session
+5. **first_session_games_played** - Games played in first session
+6. **first_session_won** - Whether user won on first bet
+7. **first_session_bonus_used** - Whether bonus was used
+8. **first_session_deposited** - Whether deposit was made
 
 ---
 
@@ -149,23 +157,23 @@ Develop a predictive model to identify customers who will **churn** (NOT make a 
 
 ### ROI by Campaign Type (for Churn Intervention)
 
-| Campaign | Cost/User | Retention Rate | Expected CLV Saved | Net Value/User | ROI |
-|----------|-----------|----------------|-------------------|----------------|-----|
-| Email | R\$25 | 27.5% | R\$275 | R\$250 | 900% |
-| Bonus | R\$100 | 25% | R\$250 | R\$150 | 150% |
-| Phone | R\$137.50 | 20% | R\$200 | R\$62.50 | 45% |
-| VIP Manager | R\$375 | 15% | R\$150 | -R\$225 | -60% |
+| Campaign | Cost/User | Expected Success | Expected CLV Saved | Net Value/User | ROI |
+|----------|-----------|------------------|-------------------|----------------|-----|
+| Email | R$25 | 27.5% | R$275 | R$250 | 900% |
+| Bonus | R$100 | 25% | R$250 | R$150 | 150% |
+| Phone | R$137.50 | 20% | R$200 | R$62.50 | 45% |
+| VIP Manager | R$375 | 15% | R$150 | -R$225 | -60% |
 
-**Note**: VIP Manager campaigns are only ROI-positive for high-value (Gold+) customers where CLV exceeds R\$2,500.
+**Note**: VIP Manager campaigns are only ROI-positive for high-value (Gold+) customers where CLV exceeds R$2,500.
 
-### Expected Impact
+### Expected Impact (Conservative Estimate)
 
 For every 1,000 users predicted as at-risk churners:
-- **Without Model**: No targeting, 100% churn rate
-- **With Model + Email Campaign**: 27.5% saved, 275 users retained
-- **Value Saved**: 275 × R\$1,000 avg CLV = **R\$275,000**
-- **Campaign Cost**: 1,000 × R\$25 = **R\$25,000**
-- **Net Value**: **R\$250,000 additional value**
+- **Model Precision**: ~38% are true churners = 380 actual churners
+- **With Email Campaign (27.5% success)**: 105 users retained
+- **Value Saved**: 105 x R$1,000 avg CLV = **R$105,000**
+- **Campaign Cost**: 1,000 x R$25 = **R$25,000**
+- **Net Value**: **R$80,000 additional value**
 
 ---
 
@@ -175,7 +183,7 @@ For every 1,000 users predicted as at-risk churners:
 
 1. **Deploy Early Warning System**
    - Implement model scoring for all new users after first session
-   - Create automated alerts for high-risk users
+   - Create automated alerts for high-risk users (>50% churn probability)
 
 2. **First Session Optimization**
    - A/B test "first win guarantee" program
@@ -202,9 +210,9 @@ For every 1,000 users predicted as at-risk churners:
 ### Long Term (90+ days)
 
 7. **Model Enhancement**
-   - Add real-time behavioral features
+   - Add real-time behavioral features as they become available
    - Implement automated retraining pipeline
-   - Develop LTV prediction model
+   - Develop complementary LTV prediction model
 
 8. **Holistic Customer Journey**
    - Integrate model with CRM system
@@ -220,6 +228,8 @@ For every 1,000 users predicted as at-risk churners:
 - Missing deposit values indicate no deposit
 
 ### Limitations
+- **First-Session Only Features**: Model intentionally uses only data available at time of first session to avoid data leakage
+- **Moderate Predictive Power**: ROC-AUC ~0.60 reflects the difficulty of predicting churn with limited initial data
 - Relatively small dataset (1,446 users)
 - 18-month period may not capture full seasonality
 - No user acquisition cost data
@@ -229,6 +239,7 @@ For every 1,000 users predicted as at-risk churners:
 - Collect longer historical data
 - Track acquisition channel costs
 - Implement real-time feature computation
+- Consider multi-session models for ongoing retention monitoring
 
 ---
 
@@ -239,29 +250,30 @@ For every 1,000 users predicted as at-risk churners:
 Pipeline:
 ├── Data Loading (data_loader.py)
 ├── Feature Engineering (feature_engineering.py)
-│   ├── First Session Features (~25)
-│   ├── Behavioral Features (~20)
-│   ├── Financial Features (~20)
-│   ├── Engagement Features (~10)
-│   └── Trend Features (~6)
+│   └── First Session Features (~36 features)
+│       ├── Temporal (hour, day_of_week, weekend, holiday)
+│       ├── Financial (bet_amount, win_amount, net_result, deposit)
+│       ├── Behavioral (games_played, session_length, bonus_used)
+│       └── Demographics (vip_tier, device, country, payment_method)
 ├── Preprocessing
 │   ├── RobustScaler for numerical
 │   └── Target/One-Hot encoding for categorical
 └── Modeling (model_training.py)
-    ├── Logistic Regression (baseline)
+    ├── Logistic Regression (best generalization)
     ├── Random Forest
-    ├── XGBoost (best)
+    ├── XGBoost
     └── LightGBM
 ```
 
 ### Files Delivered
 - `notebooks/01_exploratory_data_analysis.ipynb` - Complete EDA
-- `notebooks/02_feature_engineering.ipynb` - Feature construction
+- `notebooks/02_feature_engineering.ipynb` - Feature construction (first session only)
 - `notebooks/03_modeling_and_evaluation.ipynb` - Model training & evaluation
 - `src/data_loader.py` - Data loading utilities
 - `src/feature_engineering.py` - Feature engineering pipeline
 - `src/model_training.py` - Model training utilities
 - `src/metrics.py` - ML and business metrics
+- `app.py` - Streamlit dashboard application
 - `reports/executive_summary.md` - This document
 
 ---

@@ -224,15 +224,16 @@ The target variable indicates whether a user **churned** (did NOT make a redepos
 
 ### Feature Engineering
 
-Over 80 features were engineered across five categories:
+**36 first-session features** were engineered to predict churn without data leakage:
 
 | Category | Examples | Count |
 |----------|----------|-------|
-| First Session | first_session_won, first_session_net_result, first_session_length | ~15 |
-| Behavioral | total_sessions, avg_session_length, game_type_diversity | ~20 |
-| Financial | total_bet_amount, win_rate, net_deposits | ~20 |
-| Engagement | bonus_usage_rate, mobile_ratio, weekend_ratio | ~10 |
-| Trend | bet_amount_trend, session_gap_trend, engagement_decay | ~6 |
+| Temporal | first_session_hour, first_session_day_of_week, first_session_weekend | ~6 |
+| Financial | first_session_bet_amount, first_session_win_amount, first_session_net_result | ~8 |
+| Behavioral | first_session_games_played, first_session_length, first_session_bonus_used | ~6 |
+| Demographics | first_session_vip_tier, first_session_device, first_session_country | ~16 |
+
+**Note**: Only first-session data is used to avoid data leakage. This ensures the model can make predictions immediately after a user's first betting session.
 
 ### Missing Values Treatment
 
@@ -299,35 +300,40 @@ Customers who **win on their first bet** have a significantly higher redeposit r
 
 ## Model Performance
 
-### Best Model: LightGBM/XGBoost
+### Best Model: Logistic Regression / LightGBM
 
-| Metric | Value |
-|--------|-------|
-| ROC-AUC | 0.78 |
-| PR-AUC | 0.72 |
-| F2-Score | 0.68 |
-| Recall | 0.75 |
-| Precision | 0.65 |
+| Metric | Validation | Test |
+|--------|------------|------|
+| ROC-AUC | 0.66 | 0.56 |
+| PR-AUC | 0.45 | 0.34 |
+| F2-Score | 0.56 | 0.50 |
+| Recall | 0.58 | 0.54 |
+| Precision | 0.42 | 0.38 |
 
-### Top Predictive Features
+**Note**: These metrics reflect the challenging task of predicting churn using only first-session data (no data leakage). The model provides meaningful business value despite moderate metrics.
+
+### Top Predictive Features (First Session Only)
 
 1. `first_session_net_result` - Net result of first betting session
-2. `first_session_won` - Whether user won on first bet
-3. `first_session_length` - Duration of first session
-4. `first_session_games_played` - Games played in first session
-5. `first_session_bonus_used` - Whether bonus was used
-6. `total_sessions` - Total number of sessions
-7. `avg_bet_amount` - Average bet amount
-8. `session_gap_trend` - Trend in gaps between sessions
+2. `first_session_bet_amount` - Amount bet in first session
+3. `first_session_win_amount` - Winnings in first session
+4. `first_session_length` - Duration of first session
+5. `first_session_games_played` - Games played in first session
+6. `first_session_won` - Whether user won on first bet
+7. `first_session_bonus_used` - Whether bonus was used
+8. `first_session_deposited` - Whether deposit was made in first session
 
 ### Business Impact
 
-For every 1,000 users predicted as churners:
+For every 1,000 users predicted as at-risk churners:
 
-| Scenario | Users Saved | Additional Value |
-|----------|-------------|------------------|
-| Without Model | 150 | Baseline |
-| With Model | 188 | +R$38,000 |
+| Metric | Value |
+|--------|-------|
+| True churners (38% precision) | 380 users |
+| Saved with email campaign (27.5%) | 105 users |
+| Value saved | R$105,000 |
+| Campaign cost | R$25,000 |
+| **Net value** | **R$80,000** |
 
 ## File Descriptions
 
