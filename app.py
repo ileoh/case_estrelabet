@@ -125,7 +125,7 @@ def load_data():
 
 
 def generate_features_from_raw(df_raw):
-    """Generate features from raw session data."""
+    """Generate features from raw session data (FIRST SESSION ONLY - no data leakage)."""
     df = df_raw.copy()
 
     # Mark first session
@@ -143,70 +143,75 @@ def generate_features_from_raw(df_raw):
     churn = df.groupby('user_id').apply(check_churn)
     churn.name = 'churn'
 
-    # Get first session data
+    # Get first session data ONLY
     first_sessions = df[df['is_first_session']].copy()
 
-    # Create user-level features
+    # Create user-level features from FIRST SESSION ONLY
     features = pd.DataFrame()
     features['user_id'] = first_sessions['user_id'].values
 
-    # First session features
+    # First session temporal features
     features['first_session_hour'] = first_sessions['hour'].values
     features['first_session_day_of_week'] = first_sessions['day_of_week'].values
-    features['first_session_weekend'] = first_sessions['is_weekend'].values
+    features['first_session_weekend'] = first_sessions['is_weekend'].astype(int).values
+
+    # Check for holiday column
+    if 'is_holiday' in first_sessions.columns:
+        features['first_session_holiday'] = first_sessions['is_holiday'].astype(int).values
+    else:
+        features['first_session_holiday'] = 0
+
+    # First session betting features
     features['first_session_bet_amount'] = first_sessions['bet_amount'].values
     features['first_session_win_amount'] = first_sessions['win_amount'].values
     features['first_session_net_result'] = first_sessions['net_result'].values
     features['first_session_won'] = (first_sessions['net_result'] > 0).astype(int).values
     features['first_session_length'] = first_sessions['session_length_minutes'].values
     features['first_session_games_played'] = first_sessions['games_played'].values
-    features['first_session_bonus_used'] = first_sessions['bonus_used'].values
+    features['first_session_bonus_used'] = first_sessions['bonus_used'].astype(int).values
     features['first_session_deposited'] = (first_sessions['deposit_amount'].fillna(0) > 0).astype(int).values
     features['first_session_deposit_amount'] = first_sessions['deposit_amount'].fillna(0).values
+    features['first_session_withdrew'] = (first_sessions['withdrawal_amount'].fillna(0) > 0).astype(int).values if 'withdrawal_amount' in first_sessions.columns else 0
 
-    # Behavioral aggregations
-    behavioral = df.groupby('user_id').agg({
-        'session_id': 'count',
-        'session_length_minutes': ['sum', 'mean'],
-        'games_played': ['sum', 'mean'],
-        'bet_amount': ['sum', 'mean', 'max'],
-        'win_amount': ['sum', 'mean'],
-        'net_result': ['sum', 'mean'],
-        'bonus_used': ['sum', 'mean'],
-        'is_weekend': 'mean',
-        'game_type': 'nunique',
-        'device_type': 'nunique'
-    })
-    behavioral.columns = ['_'.join(col).strip('_') for col in behavioral.columns]
-    behavioral = behavioral.rename(columns={
-        'session_id_count': 'total_sessions',
-        'session_length_minutes_sum': 'total_time_played',
-        'session_length_minutes_mean': 'avg_session_length',
-        'games_played_sum': 'total_games_played',
-        'games_played_mean': 'avg_games_per_session',
-        'bet_amount_sum': 'total_bet_amount',
-        'bet_amount_mean': 'avg_bet_amount',
-        'bet_amount_max': 'max_bet_amount',
-        'win_amount_sum': 'total_win_amount',
-        'win_amount_mean': 'avg_win_amount',
-        'net_result_sum': 'total_net_result',
-        'net_result_mean': 'avg_net_result',
-        'bonus_used_sum': 'total_bonuses_used',
-        'bonus_used_mean': 'bonus_usage_rate',
-        'is_weekend_mean': 'weekend_ratio',
-        'game_type_nunique': 'game_type_diversity',
-        'device_type_nunique': 'device_diversity'
-    })
-    behavioral = behavioral.reset_index()
+    # First session user demographics
+    if 'user_age' in first_sessions.columns:
+        features['first_session_user_age'] = first_sessions['user_age'].fillna(first_sessions['user_age'].median()).values
 
-    # Merge all features
-    features = features.merge(behavioral, on='user_id', how='left')
+    # Account age at first session
+    if 'account_created_at' in first_sessions.columns and 'timestamp' in first_sessions.columns:
+        account_created = pd.to_datetime(first_sessions['account_created_at'])
+        session_time = pd.to_datetime(first_sessions['timestamp'])
+        features['first_session_account_age'] = (session_time - account_created).dt.days.values
+
+    # VIP tier encoding
+    if 'vip_tier' in first_sessions.columns:
+        vip_mapping = {'bronze': 0, 'silver': 1, 'gold': 2, 'platinum': 3, 'diamond': 4}
+        features['first_session_vip_tier_encoded'] = first_sessions['vip_tier'].map(vip_mapping).fillna(0).values
+
+    # Device type one-hot encoding
+    if 'device_type' in first_sessions.columns:
+        device_dummies = pd.get_dummies(first_sessions['device_type'], prefix='first_session_device')
+        for col in device_dummies.columns:
+            features[col] = device_dummies[col].values
+
+    # Game type one-hot encoding
+    if 'game_type' in first_sessions.columns:
+        game_dummies = pd.get_dummies(first_sessions['game_type'], prefix='first_session_game_type')
+        for col in game_dummies.columns:
+            features[col] = game_dummies[col].values
+
+    # Campaign type one-hot encoding
+    if 'campaign_type' in first_sessions.columns:
+        campaign_dummies = pd.get_dummies(first_sessions['campaign_type'].fillna('none'), prefix='first_session_campaign')
+        for col in campaign_dummies.columns:
+            features[col] = campaign_dummies[col].values
+
+    # Sports betting flag
+    if 'sport_type' in first_sessions.columns:
+        features['first_session_is_sports'] = first_sessions['sport_type'].notna().astype(int).values
 
     # Add churn target
     features = features.merge(churn.reset_index(), on='user_id', how='left')
-
-    # Calculate derived features
-    features['win_rate'] = features['total_win_amount'] / features['total_bet_amount'].replace(0, 1)
 
     # Fill missing values
     features = features.fillna(0)
@@ -440,9 +445,11 @@ def show_dashboard(df, model_package):
 
     with col4:
         if model_package:
+            metrics = model_package.get('metrics', {})
+            roc_auc = metrics.get('ROC-AUC') or metrics.get('roc_auc', 0)
             st.metric(
                 "Model ROC-AUC",
-                f"{model_package['metrics']['ROC-AUC']:.2%}",
+                f"{roc_auc:.2%}",
                 help="Model discrimination performance"
             )
         else:
@@ -489,16 +496,16 @@ def show_dashboard(df, model_package):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Sessions Distribution")
-        if 'total_sessions' in df.columns:
+        st.subheader("First Session Length Distribution")
+        if 'first_session_length' in df.columns:
             fig = px.histogram(
                 df,
-                x='total_sessions',
+                x='first_session_length',
                 color=df['churn'].map({0: 'Retained', 1: 'Churned'}),
                 barmode='overlay',
                 nbins=30,
                 color_discrete_sequence=['#27ae60', '#e74c3c'],
-                labels={'color': 'Status'}
+                labels={'color': 'Status', 'first_session_length': 'Session Length (minutes)'}
             )
             fig.update_layout(height=350)
             st.plotly_chart(fig, use_container_width=True)
@@ -636,11 +643,11 @@ def show_individual_prediction(df, model_package):
             )
 
         with col2:
-            total_sessions = st.number_input(
-                "Total Sessions",
-                min_value=1,
-                max_value=100,
-                value=1
+            first_session_user_age = st.number_input(
+                "User Age",
+                min_value=18,
+                max_value=80,
+                value=30
             )
 
         with col3:
@@ -656,8 +663,7 @@ def show_individual_prediction(df, model_package):
     if submitted:
         st.markdown("---")
 
-        # Create feature vector (simplified for demo)
-        # In production, this would use the full feature engineering pipeline
+        # Create feature vector (first session only - no data leakage)
         feature_values = {
             'first_session_won': first_session_won,
             'first_session_net_result': first_session_net_result,
@@ -668,7 +674,7 @@ def show_individual_prediction(df, model_package):
             'first_session_deposited': first_session_deposited,
             'first_session_hour': first_session_hour,
             'first_session_weekend': first_session_weekend,
-            'total_sessions': total_sessions
+            'first_session_user_age': first_session_user_age
         }
 
         # For demo purposes, use a heuristic if model features don't match
@@ -700,7 +706,7 @@ def show_individual_prediction(df, model_package):
             # Fallback to heuristic prediction
             st.warning(f"Using heuristic prediction due to feature mismatch: {e}")
 
-            # Simple heuristic based on key factors
+            # Simple heuristic based on first session factors only
             base_prob = 0.45  # Base churn probability
 
             # Adjust based on first bet result
@@ -719,9 +725,9 @@ def show_individual_prediction(df, model_package):
             if first_session_bonus_used:
                 base_prob -= 0.05
 
-            # Adjust based on total sessions
-            if total_sessions > 3:
-                base_prob -= 0.15
+            # Adjust based on games played
+            if first_session_games_played > 10:
+                base_prob -= 0.10
 
             prob_churn = max(0.05, min(0.95, base_prob))
 
@@ -815,12 +821,12 @@ def show_batch_prediction(df, model_package):
             min_vip = st.slider("Minimum VIP Level", 0, 5, 0)
 
     with col2:
-        if 'total_sessions' in df.columns:
-            min_sessions = st.slider(
-                "Minimum Sessions",
-                int(df['total_sessions'].min()),
-                int(df['total_sessions'].max()),
-                1
+        if 'first_session_length' in df.columns:
+            min_session_length = st.slider(
+                "Min Session Length (min)",
+                int(df['first_session_length'].min()),
+                int(df['first_session_length'].max()),
+                0
             )
 
     with col3:
