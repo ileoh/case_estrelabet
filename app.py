@@ -105,6 +105,9 @@ def load_data():
     features_path = Path("data/features_engineered.csv")
     if features_path.exists():
         df = pd.read_csv(features_path)
+        # Rename 'target' to 'churn' for consistency
+        if 'target' in df.columns and 'churn' not in df.columns:
+            df = df.rename(columns={'target': 'churn'})
         return df
 
     # Fallback: Load raw data and generate basic features
